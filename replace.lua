@@ -24,10 +24,10 @@ while true do
       if broke then
         sleep(0.2)
         turtle.place()
-        print("заменил блок")
+        print("replaced block")
       end
     else
-      print("нет акации в инвентаре")
+      print("empty inventar")
     end
   end
 
