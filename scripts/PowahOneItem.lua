@@ -1,4 +1,4 @@
-local inputItem = "minecraft:acacia_log"
+local inputItem = turtle.getItemDetail(1)
 local delay = 2
 
 local function findItem(name)
@@ -33,4 +33,4 @@ while true do
     local sucked = turtle.suck()
     print("Take result: " .. tostring(sucked))
   end
-end
+endg
