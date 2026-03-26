@@ -1,3 +1,6 @@
+print("VERSION 2 DEBUG BUILD")
+sleep(2)
+
 local targetBlock = "minecraft:stripped_acacia_log"
 local placeBlock = "minecraft:acacia_log"
 
@@ -53,15 +56,15 @@ while true do
           log("Place result: " .. tostring(placed))
 
           if placed then
-            print("✔ Block replaced")
+            print("Block replaced")
           else
-            print("❌ Failed to place block")
+            print("Failed to place block")
           end
         else
-          print("❌ Failed to break block")
+          print("Failed to break block")
         end
       else
-        print("❌ No blocks to place (inventory empty)")
+        print("No blocks to place")
       end
     else
       log("Block is not target")
