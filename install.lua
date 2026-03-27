@@ -20,4 +20,4 @@ for _, file in ipairs(files) do
   shell.run("wget", url, file.localName)
 end
 
-print("INSTALL COMPLETE")gi
+print("INSTALL COMPLETE")
