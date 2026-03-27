@@ -1,5 +1,7 @@
 local delay = 2
 local templateSlot = 1
+local MAX_STACK = 64
+local REFILL_THRESHOLD = 32
 
 local function log(msg)
   print("[LOG] " .. msg)
@@ -13,16 +15,17 @@ local function getTemplateItem()
   return nil
 end
 
-local function getSlotItem(slot)
-  return turtle.getItemDetail(slot)
+local function getCountInSlot(slot)
+  local item = turtle.getItemDetail(slot)
+  return item and item.count or 0
 end
 
 local function countFreeSpaceInSlot(slot)
   local item = turtle.getItemDetail(slot)
   if not item then
-    return 64
+    return MAX_STACK
   end
-  return 64 - item.count
+  return MAX_STACK - item.count
 end
 
 local function findSameItemSlot(name, exceptSlot)
@@ -62,6 +65,24 @@ local function compactTemplateToSlot1(templateName)
   end
 end
 
+local function consolidateTemplateInsideInventory(templateName)
+  while true do
+    local free = countFreeSpaceInSlot(templateSlot)
+    if free <= 0 then
+      return
+    end
+
+    local otherSlot = findSameItemSlot(templateName, templateSlot)
+    if not otherSlot then
+      return
+    end
+
+    turtle.select(otherSlot)
+    turtle.transferTo(templateSlot)
+    log("Consolidated template from slot " .. otherSlot .. " into slot 1")
+  end
+end
+
 local function faceChestRight()
   turtle.turnRight()
 end
@@ -74,73 +95,74 @@ local function dropNonTemplateToRightChestWhileFacing(templateName)
   for slot = 1, 16 do
     local item = turtle.getItemDetail(slot)
     if item and item.name ~= templateName then
-      local itemName = item.name
-      local itemCount = item.count
       turtle.select(slot)
       local ok = turtle.drop()
-      log("Dropped to right chest from slot " .. slot .. ": " .. itemName .. " x" .. itemCount .. " / ok=" .. tostring(ok))
+      log("Dropped non-template from slot " .. slot .. ": " .. item.name .. " x" .. item.count .. " / ok=" .. tostring(ok))
     end
   end
 end
 
-local function refillTemplateFromRightChestWhileFacing(templateName)
-  local free = countFreeSpaceInSlot(templateSlot)
-  if free <= 0 then
-    log("Slot 1 is full, refill not needed")
+local function refillTemplateToFullFromRightChest(templateName)
+  consolidateTemplateInsideInventory(templateName)
+
+  local slot1 = turtle.getItemDetail(templateSlot)
+  if slot1 and slot1.name ~= templateName then
+    log("Slot 1 changed, refill cancelled")
     return
   end
 
-  log("Checking right chest for template item: " .. templateName)
+  local free = countFreeSpaceInSlot(templateSlot)
+  if free <= 0 then
+    log("Slot 1 already full")
+    return
+  end
 
-  local moved = 0
+  log("Trying to refill slot 1 to 64 from right chest")
 
-  for slot = 1, 16 do
-    if slot ~= templateSlot then
-      local item = turtle.getItemDetail(slot)
-      if item and item.name == templateName then
-        turtle.select(slot)
-        turtle.transferTo(templateSlot)
+  for slot = 2, 16 do
+    if countFreeSpaceInSlot(templateSlot) <= 0 then
+      break
+    end
+
+    local slotItem = turtle.getItemDetail(slot)
+
+    if not slotItem then
+      turtle.select(slot)
+      local need = countFreeSpaceInSlot(templateSlot)
+      local took = turtle.suck(need)
+
+      if took then
+        local taken = turtle.getItemDetail(slot)
+
+        if taken and taken.name == templateName then
+          turtle.transferTo(templateSlot)
+          log("Pulled template from right chest into slot " .. slot)
+        else
+          if taken then
+            log("Pulled wrong item from chest into slot " .. slot .. ": " .. taken.name .. ", returning")
+          else
+            log("Pulled unknown item from chest into slot " .. slot .. ", returning")
+          end
+          turtle.drop()
+        end
       end
     end
   end
 
-  while countFreeSpaceInSlot(templateSlot) > 0 do
-    local beforeSelected = turtle.getSelectedSlot()
-    local took = turtle.suck(1)
-
-    if not took then
-      log("Could not take more items from right chest")
-      break
-    end
-
-    local takenItem = turtle.getItemDetail(beforeSelected)
-
-    if takenItem and takenItem.name == templateName then
-      turtle.select(beforeSelected)
-      turtle.transferTo(templateSlot)
-      moved = moved + 1
-      log("Moved 1 template item from right chest to slot 1")
-    else
-      if takenItem then
-        log("Took non-template item from chest: " .. takenItem.name .. ", returning it")
-        turtle.select(beforeSelected)
-        turtle.drop()
-      else
-        log("Took unknown item from chest, returning it")
-        turtle.select(beforeSelected)
-        turtle.drop()
-      end
-      break
-    end
-  end
-
-  log("Refill complete, moved " .. moved .. " items into slot 1")
+  consolidateTemplateInsideInventory(templateName)
+  log("Refill finished, slot 1 count: " .. getCountInSlot(templateSlot))
 end
 
-local function handleRightChest(templateName)
+local function handleRightChest(templateName, shouldRefill)
   faceChestRight()
   dropNonTemplateToRightChestWhileFacing(templateName)
-  refillTemplateFromRightChestWhileFacing(templateName)
+
+  if shouldRefill then
+    refillTemplateToFullFromRightChest(templateName)
+  else
+    log("Refill skipped, slot 1 is above threshold")
+  end
+
   faceFrontFromChest()
 end
 
@@ -169,7 +191,7 @@ if not templateName then
 end
 
 print("Template item locked: " .. templateName)
-log("Initial slot 1 count: " .. (getSlotItem(1) and getSlotItem(1).count or 0))
+log("Initial slot 1 count: " .. getCountInSlot(templateSlot))
 
 while true do
   compactTemplateToSlot1(templateName)
@@ -194,12 +216,20 @@ while true do
     sleep(1)
   else
     print("Inserted 1 item of " .. templateName)
-    log("Slot 1 count after insert: " .. ((turtle.getItemDetail(1) and turtle.getItemDetail(1).count) or 0))
+    log("Slot 1 count after insert: " .. getCountInSlot(templateSlot))
 
     local took = waitAndCollectFront()
     log("Collected from front: " .. tostring(took))
 
-    handleRightChest(templateName)
+    compactTemplateToSlot1(templateName)
+
+    local currentCount = getCountInSlot(templateSlot)
+    local shouldRefill = currentCount < REFILL_THRESHOLD
+
+    log("Slot 1 count before chest handling: " .. currentCount)
+    log("Refill threshold: " .. REFILL_THRESHOLD .. ", shouldRefill=" .. tostring(shouldRefill))
+
+    handleRightChest(templateName, shouldRefill)
 
     local slot1Now = turtle.getItemDetail(templateSlot)
     if slot1Now and slot1Now.name == templateName then
