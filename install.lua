@@ -4,7 +4,8 @@ local branch = "main"
 
 local files = {
   { remote = "scripts/replace.lua", localName = "replace.lua" },
-  { remote = "scripts/PowahOneItem.lua", localName = "PowahOneItem.lua" }
+  { remote = "scripts/PowahOneItem.lua", localName = "PowahOneItem.lua" },
+  { remote = "scripts/inspect.lua", localName = "inspect.lua" }
 }
 
 for _, file in ipairs(files) do
@@ -19,4 +20,4 @@ for _, file in ipairs(files) do
   shell.run("wget", url, file.localName)
 end
 
-print("INSTALL COMPLETE")
+print("INSTALL COMPLETE")gi
