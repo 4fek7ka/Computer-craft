@@ -70,34 +70,20 @@ local function faceFrontFromChest()
   turtle.turnLeft()
 end
 
-local function suckRight(count)
-  faceChestRight()
-  local ok = turtle.suck(count or 64)
-  faceFrontFromChest()
-  return ok
-end
-
-local function dropRight(count)
-  faceChestRight()
-  local ok = turtle.drop(count or 64)
-  faceFrontFromChest()
-  return ok
-end
-
-local function dropNonTemplateToRightChest(templateName)
+local function dropNonTemplateToRightChestWhileFacing(templateName)
   for slot = 1, 16 do
     local item = turtle.getItemDetail(slot)
     if item and item.name ~= templateName then
       local itemName = item.name
       local itemCount = item.count
       turtle.select(slot)
-      local ok = dropRight()
+      local ok = turtle.drop()
       log("Dropped to right chest from slot " .. slot .. ": " .. itemName .. " x" .. itemCount .. " / ok=" .. tostring(ok))
     end
   end
 end
 
-local function refillTemplateFromRightChest(templateName)
+local function refillTemplateFromRightChestWhileFacing(templateName)
   local free = countFreeSpaceInSlot(templateSlot)
   if free <= 0 then
     log("Slot 1 is full, refill not needed")
@@ -108,36 +94,54 @@ local function refillTemplateFromRightChest(templateName)
 
   local moved = 0
 
-  for _ = 1, free do
-    local took = suckRight(1)
+  for slot = 1, 16 do
+    if slot ~= templateSlot then
+      local item = turtle.getItemDetail(slot)
+      if item and item.name == templateName then
+        turtle.select(slot)
+        turtle.transferTo(templateSlot)
+      end
+    end
+  end
+
+  while countFreeSpaceInSlot(templateSlot) > 0 do
+    local beforeSelected = turtle.getSelectedSlot()
+    local took = turtle.suck(1)
+
     if not took then
       log("Could not take more items from right chest")
       break
     end
 
-    local selected = turtle.getSelectedSlot()
-    local item = turtle.getItemDetail(selected)
+    local takenItem = turtle.getItemDetail(beforeSelected)
 
-    if item and item.name == templateName then
+    if takenItem and takenItem.name == templateName then
+      turtle.select(beforeSelected)
       turtle.transferTo(templateSlot)
       moved = moved + 1
       log("Moved 1 template item from right chest to slot 1")
     else
-      if item then
-        log("Took non-template item from chest: " .. item.name .. ", returning it")
+      if takenItem then
+        log("Took non-template item from chest: " .. takenItem.name .. ", returning it")
+        turtle.select(beforeSelected)
+        turtle.drop()
       else
         log("Took unknown item from chest, returning it")
+        turtle.select(beforeSelected)
+        turtle.drop()
       end
-      dropRight()
-      break
-    end
-
-    if countFreeSpaceInSlot(templateSlot) <= 0 then
       break
     end
   end
 
   log("Refill complete, moved " .. moved .. " items into slot 1")
+end
+
+local function handleRightChest(templateName)
+  faceChestRight()
+  dropNonTemplateToRightChestWhileFacing(templateName)
+  refillTemplateFromRightChestWhileFacing(templateName)
+  faceFrontFromChest()
 end
 
 local function waitAndCollectFront()
@@ -195,8 +199,7 @@ while true do
     local took = waitAndCollectFront()
     log("Collected from front: " .. tostring(took))
 
-    dropNonTemplateToRightChest(templateName)
-    refillTemplateFromRightChest(templateName)
+    handleRightChest(templateName)
 
     local slot1Now = turtle.getItemDetail(templateSlot)
     if slot1Now and slot1Now.name == templateName then
